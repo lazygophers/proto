@@ -1,0 +1,290 @@
+syntax = "proto3";
+
+package lmq;
+
+import "google/protobuf/descriptor.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+import "core.proto";
+
+option cc_enable_arenas = true;
+option go_package = "github.com/lazygophers/lmq";
+option (lazygophers.lrpc.core.port) = 10001;
+
+service lmq {
+	// @gen: topic
+	rpc SetTopic (SetTopicReq) returns (SetTopicRsp) {
+	};
+
+	// @gen: topic
+	rpc GetTopic (GetTopicReq) returns (GetTopicRsp) {
+	};
+
+	// @gen: topic
+	rpc ListTopic (ListTopicReq) returns (ListTopicRsp) {
+
+	}
+
+	// @gen: topic
+	rpc DeleteTopic (DeleteTopicReq) returns (DeleteTopicRsp) {
+	};
+
+	// @gen: channel
+	rpc SetChannel (SetChannelReq) returns (SetChannelRsp) {
+	};
+
+	// @gen: channel
+	rpc GetChannel (GetChannelReq) returns (GetChannelRsp) {
+	}
+
+	// @gen: channel
+	rpc DeleteChannel (DeleteChannelReq) returns (DeleteChannelRsp) {
+	};
+
+	// @gen: message
+	rpc Pub (PubReq) returns (PubRsp) {
+	};
+
+	// @gen: message
+	rpc BatchPub (BatchPubReq) returns (BatchPubRsp) {
+	};
+
+	// @gen: pop
+	rpc PopMessage (PopMessageReq) returns (PopMessageRsp) {
+	};
+
+	// @gen: pop
+	rpc FinishMessage (FinishMessageReq) returns (FinishMessageRsp) {
+	};
+}
+
+// @range: 30000-30200
+enum ErrCode {
+	Success = 0;
+
+	TopicNotFound = 30000;// topic not found
+	ChannelNotFound = 30001; // channel not found
+	MessageTooLarge = 30002; // message too large
+	QueueEmpty = 30003;// queue is empty
+}
+
+message Channel {
+	string name = 1;
+
+	// @validate: required
+	lazygophers.lrpc.core.ServiceDiscoveryClient client = 2;
+
+	// 最大并发数
+	uint32 concurrent_count = 11;
+	// 最大重试次数
+	uint32 max_retry_count = 12;
+	// 最大执行时间
+	google.protobuf.Duration max_exec_time = 13;
+	// 消息延期执行时间
+	google.protobuf.Duration delay_time = 14;
+	// 消息过期时间
+	google.protobuf.Duration expiry_time = 15;
+	// 最小重试间隔
+	google.protobuf.Duration min_retry_interval = 16;
+	// 最大重试间隔
+	google.protobuf.Duration max_retry_interval = 17;
+	// 指定消费的 tags
+	repeated string tag_list = 18;
+}
+
+message DiskQueue {
+	uint64 max_file_part_size = 1;
+}
+
+message Topic {
+	// @validate: required
+	string name = 1;
+	int64 created_at = 2;
+	int64 updated_at = 3;
+
+	repeated Channel channel_list = 4;
+
+	DiskQueue disk_queue = 5;
+	uint64 max_msg_size = 6;
+}
+
+message Message {
+	google.protobuf.Timestamp created_at = 1;
+
+	string msg_id = 2;
+	// @validate: required
+	bytes data = 3;
+
+	// 可以指定某一个 channel 只消费特定 tags
+	repeated string tag_list = 4;
+	// 用于单一 channel 内的穿行话，防止多资源间的抢占
+	uint32 hash = 5;
+
+	// 重试计数
+	uint32 retry_count = 6;
+	// 最大重试次数
+	uint32 max_retry_count = 9;
+
+	// 最大执行时间
+	google.protobuf.Duration max_exec_time = 10;
+
+	// 最早的执行时间
+	google.protobuf.Timestamp exec_at = 7;
+	// 过期时间
+	google.protobuf.Timestamp expire_at = 8;
+}
+
+message SetTopicReq {
+	// @validate: required
+	Topic topic = 1;
+}
+
+message SetTopicRsp {
+	Topic topic = 1;
+}
+
+message GetTopicReq {
+	// @validate: required
+	string topic_name = 1;
+
+	bool show_depth = 2;
+}
+
+message GetTopicRsp {
+	Topic topic = 1;
+	int64 depth = 2;
+}
+
+message ListTopicReq {
+
+}
+
+message ListTopicRsp {
+	repeated Topic topic_list = 1;
+}
+
+message SetChannelReq {
+	// @validate: required
+	string topic_name = 1;
+
+	// @validate: required
+	Channel channel = 2;
+}
+
+message SetChannelRsp {
+	Channel channel = 1;
+}
+
+message DeleteTopicReq {
+	// @validate: required
+	string topic_name = 1;
+}
+
+message DeleteTopicRsp {
+}
+
+message DeleteChannelReq {
+	// @validate: required
+	string topic_name = 1;
+
+	// @validate: required
+	string channel_name = 2;
+}
+
+message DeleteChannelRsp {
+}
+
+message GetChannelReq {
+	// @validate: required
+	string topic_name = 1;
+
+	// @validate: required
+	string channel_name = 2;
+}
+
+message GetChannelRsp {
+	Channel channel = 1;
+}
+
+message PubReq {
+	// @validate: required
+	string topic_name = 1;
+
+	// 可选的，如果存在则表示给单一 channel 推送
+	string channel_name = 2;
+
+	// @validate: required
+	Message msg = 3;
+}
+
+message PubRsp {
+	string msg_id = 1;
+}
+
+message BatchPubReq {
+	// @validate: required
+	string topic_name = 1;
+
+	// 可选的，如果存在则表示给单一 channel 推送
+	string channel_name = 2;
+
+	// @validate: required,min=1
+	repeated Message msg_list = 3;
+
+	bool break_when_error = 4;
+}
+
+message BatchPubRsp {
+	repeated string msg_id_list = 1;
+}
+
+message QueuePop {
+	google.protobuf.Timestamp created_at = 1;
+	uint32 retry_count = 2;
+	bytes data = 3;
+	string msg_id = 4;
+
+	// 最大重试次数，业务可以根据这个字段做一些临界处理
+	uint32 max_retry_count = 5;
+}
+
+message QueueDone {
+	string msg_id = 1;
+	bool need_retry = 2;
+	bool skip_retry_count = 3;
+
+	google.protobuf.Duration retry_wait = 4;
+}
+
+message ConsumeReq {
+	QueuePop msg = 1;
+}
+
+message ConsumeRsp {
+	QueueDone msg = 1;
+}
+
+message PopMessageReq {
+	// @validate: required
+	string topic_name = 1;
+	// @validate: required
+	string channel_name = 2;
+}
+
+message PopMessageRsp {
+	QueuePop msg = 1;
+}
+
+message FinishMessageReq {
+	// @validate: required
+	string topic_name = 1;
+	// @validate: required
+	string channel_name = 2;
+
+	// @validate: required
+	QueueDone msg = 3;
+}
+
+message FinishMessageRsp {
+
+}

@@ -1,0 +1,209 @@
+syntax = "proto3";
+
+package lazygophers.lrpc.core;
+
+import "google/protobuf/descriptor.proto";
+import "google/protobuf/any.proto";
+import "google/protobuf/duration.proto";
+
+option cc_enable_arenas = true;
+option go_package = "github.com/lazygophers/lrpc/middleware/core";
+
+//	0	-	100 	xerror包占用
+//	100	-	1000	http status code
+//	1000 -	2000	core 占用
+//	2000 - 10000
+enum ErrCode {
+	Success = 0;
+
+	//	100	-	1000	http status code
+	StatusContinue = 100;
+	StatusSwitchingProtocols = 101;
+	StatusProcessing = 102;
+	StatusEarlyHints = 103;
+
+	StatusOK = 200;
+	StatusCreated = 201;
+	StatusAccepted = 202;
+	StatusNonAuthoritativeInfo = 203;
+	StatusNoContent = 204;
+	StatusResetContent = 205;
+	StatusPartialContent = 206;
+	StatusMultiStatus = 207;
+	StatusAlreadyReported = 208;
+	StatusIMUsed = 226;
+
+	StatusMultipleChoices = 300;
+	StatusMovedPermanently = 301;
+	StatusFound = 302;
+	StatusSeeOther = 303;
+	StatusNotModified = 304;
+	StatusUseProxy = 305;
+	StatusTemporaryRedirect = 307;
+	StatusPermanentRedirect = 308;
+
+	StatusBadRequest = 400;
+	StatusUnauthorized = 401;
+	StatusPaymentRequired = 402;
+	StatusForbidden = 403;
+	StatusNotFound = 404;
+	StatusMethodNotAllowed = 405;
+	StatusNotAcceptable = 406;
+	StatusProxyAuthRequired = 407;
+	StatusRequestTimeout = 408;
+	StatusConflict = 409;
+	StatusGone = 410;
+	StatusLengthRequired = 411;
+	StatusPreconditionFailed = 412;
+	StatusRequestEntityTooLarge = 413;
+	StatusRequestURITooLong = 414;
+	StatusUnsupportedMediaType = 415;
+	StatusRequestedRangeNotSatisfiable = 416;
+	StatusExpectationFailed = 417;
+	StatusTeapot = 418;
+	StatusMisdirectedRequest = 421;
+	StatusUnprocessableEntity = 422;
+	StatusLocked = 423;
+	StatusFailedDependency = 424;
+	StatusTooEarly = 425;
+	StatusUpgradeRequired = 426;
+	StatusPreconditionRequired = 428;
+	StatusTooManyRequests = 429;
+	StatusRequestHeaderFieldsTooLarge = 431;
+	StatusUnavailableForLegalReasons = 451;
+
+	StatusInternalServerError = 500;
+	StatusNotImplemented = 501;
+	StatusBadGateway = 502;
+	StatusServiceUnavailable = 503;
+	StatusGatewayTimeout = 504;
+	StatusHTTPVersionNotSupported = 505;
+	StatusVariantAlsoNegotiates = 506;
+	StatusInsufficientStorage = 507;
+	StatusLoopDetected = 508;
+	StatusNotExtended = 510;
+	StatusNetworkAuthenticationRequired = 511;
+
+	//	1000 -	2000	core 占用
+	ServerNotFound = 1000;
+	ServerNodeNotFound = 1001;
+	ServerAliveNodeNotFound = 1002;
+	ConfigNotFound = 1003;
+}
+
+// 请求返回包
+
+message BaseResponse {
+	int32 code = 1;
+	string message = 2;
+	google.protobuf.Any data = 3;
+	string hint = 4;
+}
+
+message RawReq {
+	bytes body = 1;
+}
+
+message RawRsp {
+	bytes body = 1;
+	// 不填会按照纯文本处理
+	string content_type = 2;
+}
+
+// 服务发现相关的配置
+
+enum DiscoveryType {
+	Lazy = 0;
+	Etcd = 1;
+	Consul = 2;
+	Nacos = 3;
+}
+
+message ServiceDiscoveryClient {
+	DiscoveryType discovery_type = 1;
+
+	// 当 type = none 时生效
+	repeated string url = 2;
+
+	string service_name = 3;
+	string service_path = 4;
+	string method = 5;
+
+	google.protobuf.Duration timeout = 6;
+}
+
+message ServiceDiscoveryService {
+	string service_name = 1;
+
+	repeated ServiceDiscoveryNode node_list = 2;
+}
+
+enum ServiceType {
+	Service = 0;
+}
+
+message ServiceDiscoveryNode {
+	ServiceType type = 1;
+
+	string host = 2;
+	string port = 3;
+	string username = 4;
+	string password = 5;
+
+	bool alive = 6;
+}
+
+// 分布式配置
+message ConfigItem {
+	string key = 1;
+	bytes value = 2;
+	int64 version = 3;
+}
+
+// 分页
+message ListOption {
+	message Option {
+		int32 key = 1;
+		string value = 2;
+	}
+
+	uint64 offset = 1;
+	uint64 limit = 2;
+	bool show_total = 3;
+
+	repeated Option options = 4;
+}
+
+message Paginate {
+	uint64 offset = 1;
+	uint64 limit = 2;
+	uint64 total = 3;
+}
+
+// 代码生成
+message Http {
+	optional string method = 1;
+	optional string path = 2;
+}
+
+message LazyGen {
+	string role = 1;
+	bool skip_gen_route = 2;
+	repeated string before_handlers = 3;
+	repeated string after_handlers = 4;
+}
+
+extend google.protobuf.MethodOptions {
+	optional Http http = 60000;
+	optional LazyGen lazygen = 60001;
+}
+
+extend google.protobuf.FileOptions {
+	optional int32 port = 60000;
+
+	// 指定 ip
+	// local/localhostt(相当于 127.0.0.1)
+	// lan 内网 ip
+	// */all （相当于 0.0.0.0）默认为这个
+	optional string host = 60001;
+}
